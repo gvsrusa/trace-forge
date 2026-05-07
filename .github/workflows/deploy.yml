@@ -5,19 +5,19 @@ on:
     branches: [master]
   workflow_dispatch:
 
-env:
-  PROJECT_ID: GCP_PROJECT_ID
-  REGION: us-central1
-  AGENT_SERVICE: traceforge-agent
-  WEB_SERVICE: traceforge-web
-  REGISTRY: us-central1-docker.pkg.dev/GCP_PROJECT_ID/traceforge
-
 jobs:
   deploy:
     name: Build & Deploy
     runs-on: ubuntu-latest
     permissions:
       contents: read
+
+    env:
+      PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+      REGION: ${{ vars.GCP_REGION }}
+      AGENT_SERVICE: ${{ vars.AGENT_SERVICE }}
+      WEB_SERVICE: ${{ vars.WEB_SERVICE }}
+      REGISTRY: ${{ vars.GCP_REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ vars.AR_REPOSITORY }}
 
     steps:
       - uses: actions/checkout@v4
@@ -31,9 +31,9 @@ jobs:
         uses: google-github-actions/setup-gcloud@v2
 
       - name: Configure Docker for Artifact Registry
-        run: gcloud auth configure-docker us-central1-docker.pkg.dev --quiet
+        run: gcloud auth configure-docker ${{ vars.GCP_REGION }}-docker.pkg.dev --quiet
 
-      # ── Build both images in parallel ──────────────────────────────────────
+      # ── Build both images ──────────────────────────────────────────────────
 
       - name: Build agent image
         run: |
@@ -71,7 +71,7 @@ jobs:
             --min-instances=0 \
             --max-instances=2 \
             --timeout=300 \
-            --set-env-vars="GOOGLE_GENAI_USE_VERTEXAI=1,GOOGLE_CLOUD_PROJECT=$PROJECT_ID,GOOGLE_CLOUD_LOCATION=global,GEMINI_MODEL=gemini-3-flash-preview,PHOENIX_PROJECT_NAME=traceforge,PHOENIX_COLLECTOR_ENDPOINT=https://app.phoenix.arize.com/s/YOUR_SPACE,FIRESTORE_DATABASE=(default)" \
+            --set-env-vars="GOOGLE_GENAI_USE_VERTEXAI=1,GOOGLE_CLOUD_PROJECT=$PROJECT_ID,GOOGLE_CLOUD_LOCATION=global,GEMINI_MODEL=${{ vars.GEMINI_MODEL }},PHOENIX_PROJECT_NAME=${{ vars.PHOENIX_PROJECT_NAME }},PHOENIX_COLLECTOR_ENDPOINT=${{ secrets.PHOENIX_COLLECTOR_ENDPOINT }},FIRESTORE_DATABASE=(default)" \
             --set-secrets=PHOENIX_API_KEY=phoenix-api-key:latest,GOOGLE_SEARCH_API_KEY=google-search-api-key:latest,GOOGLE_SEARCH_ENGINE_ID=google-search-engine-id:latest
 
       # ── Get agent URL, then deploy web ─────────────────────────────────────
