@@ -1,0 +1,21 @@
+@import "tailwindcss";
+
+:root {
+  --bg: #0a0a0f;
+  --surface: #13131a;
+  --border: #1e1e2e;
+  --accent: #7c3aed;
+  --text: #e2e2f0;
+  --muted: #6b7280;
+  --error: #ef4444;
+  --warn: #f59e0b;
+  --ok: #10b981;
+  --info: #3b82f6;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: ui-monospace, "JetBrains Mono", "Fira Code", monospace;
+  min-height: 100vh;
+}

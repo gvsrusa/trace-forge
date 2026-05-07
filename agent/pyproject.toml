@@ -1,0 +1,52 @@
+[project]
+name = "traceforge-agent"
+version = "0.1.0"
+description = "TraceForge — Self-improving React code review agent"
+license = { text = "Apache-2.0" }
+requires-python = ">=3.12"
+dependencies = [
+    # Google ADK + Gemini
+    "google-adk>=1.32.0",
+    "google-genai>=1.9.0",
+    # Phoenix tracing
+    "openinference-instrumentation-google-adk>=0.1.11",
+    "opentelemetry-sdk>=1.27.0",
+    "opentelemetry-exporter-otlp-proto-http>=1.27.0",
+    "arize-phoenix>=7.0",
+    # Web framework
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.32.0",
+    # GCP
+    "firebase-admin>=6.0.0",
+    "google-cloud-secret-manager>=2.21.0",
+    # Utilities
+    "python-dotenv>=1.0.1",
+    "httpx>=0.27.0",
+    "pydantic>=2.9.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.24.0",
+    "anyio[trio]>=4.0.0",
+    "ruff>=0.7.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["."]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP"]
+ignore = ["E501"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

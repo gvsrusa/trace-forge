@@ -1,0 +1,43 @@
+TraceForge_PRD.md
+
+# Environment files — NEVER commit
+.env
+.env.local
+.env.*.local
+agent/.env
+web/.env
+web/.env.local
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.uv/
+dist/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+htmlcov/
+.coverage
+
+# Node
+node_modules/
+web/.next/
+web/out/
+web/.vercel/
+*.tsbuildinfo
+
+# GCP credentials — NEVER commit
+service-account*.json
+gcp-credentials*.json
+application_default_credentials.json
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.swp
