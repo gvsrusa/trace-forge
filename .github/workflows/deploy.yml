@@ -10,6 +10,7 @@ env:
   REGION: us-central1
   AGENT_SERVICE: traceforge-agent
   WEB_SERVICE: traceforge-web
+  REGISTRY: us-central1-docker.pkg.dev/GCP_PROJECT_ID/traceforge
 
 jobs:
   deploy:
@@ -29,39 +30,39 @@ jobs:
       - name: Set up gcloud
         uses: google-github-actions/setup-gcloud@v2
 
-      - name: Configure Docker for GCR
-        run: gcloud auth configure-docker --quiet
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker us-central1-docker.pkg.dev --quiet
 
       # ── Build both images in parallel ──────────────────────────────────────
 
       - name: Build agent image
         run: |
           docker build \
-            -t gcr.io/$PROJECT_ID/$AGENT_SERVICE:$GITHUB_SHA \
-            -t gcr.io/$PROJECT_ID/$AGENT_SERVICE:latest \
+            -t $REGISTRY/$AGENT_SERVICE:$GITHUB_SHA \
+            -t $REGISTRY/$AGENT_SERVICE:latest \
             ./agent
 
       - name: Build web image
         run: |
           docker build \
-            -t gcr.io/$PROJECT_ID/$WEB_SERVICE:$GITHUB_SHA \
-            -t gcr.io/$PROJECT_ID/$WEB_SERVICE:latest \
+            -t $REGISTRY/$WEB_SERVICE:$GITHUB_SHA \
+            -t $REGISTRY/$WEB_SERVICE:latest \
             ./web
 
       # ── Push both images ───────────────────────────────────────────────────
 
       - name: Push agent image
-        run: docker push --all-tags gcr.io/$PROJECT_ID/$AGENT_SERVICE
+        run: docker push --all-tags $REGISTRY/$AGENT_SERVICE
 
       - name: Push web image
-        run: docker push --all-tags gcr.io/$PROJECT_ID/$WEB_SERVICE
+        run: docker push --all-tags $REGISTRY/$WEB_SERVICE
 
       # ── Deploy agent ───────────────────────────────────────────────────────
 
       - name: Deploy agent to Cloud Run
         run: |
           gcloud run deploy $AGENT_SERVICE \
-            --image=gcr.io/$PROJECT_ID/$AGENT_SERVICE:$GITHUB_SHA \
+            --image=$REGISTRY/$AGENT_SERVICE:$GITHUB_SHA \
             --region=$REGION \
             --platform=managed \
             --allow-unauthenticated \
@@ -86,7 +87,7 @@ jobs:
       - name: Deploy web to Cloud Run
         run: |
           gcloud run deploy $WEB_SERVICE \
-            --image=gcr.io/$PROJECT_ID/$WEB_SERVICE:$GITHUB_SHA \
+            --image=$REGISTRY/$WEB_SERVICE:$GITHUB_SHA \
             --region=$REGION \
             --platform=managed \
             --allow-unauthenticated \
