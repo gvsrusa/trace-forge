@@ -141,5 +141,7 @@ def _format_strategy(strategy: dict | None) -> str:
         return "No prior strategy. Use the default review checklist."
     lines = [f"Strategy v{strategy.get('version', 1)} — apply these adjustments:"]
     for adj in strategy["adjustments"]:
-        lines.append(f"  [{adj['dimension']}] {adj['action']}: {adj['detail']}")
+        # Strip curly braces — ADK treats {var} in instructions as template variables
+        detail = adj['detail'].replace("{", "(").replace("}", ")")
+        lines.append(f"  [{adj['dimension']}] {adj['action']}: {detail}")
     return "\n".join(lines)

@@ -34,6 +34,11 @@ class ReviewRequest(BaseModel):
     language: str = "tsx"
 
 
+class RepoReviewRequest(BaseModel):
+    repo_url: str
+    github_token: str = ""
+
+
 class FeedbackRequest(BaseModel):
     finding_id: str
     action: str  # "approve" | "reject" | "modify"
@@ -63,6 +68,43 @@ async def review(request: ReviewRequest):
                 language=request.language,
             ):
                 yield f"data: {json.dumps(event)}\n\n"
+            yield "data: [DONE]\n\n"
+        except Exception as e:
+            yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
+
+    return StreamingResponse(event_stream(), media_type="text/event-stream")
+
+
+@app.post("/api/repo-review")
+async def repo_review(request: RepoReviewRequest):
+    """Discover React components in a GitHub repo and stream reviews for each."""
+    from agent import run_review
+    from tools.fetch_repo import fetch_repo_components
+
+    async def event_stream() -> AsyncGenerator[str, None]:
+        try:
+            result = fetch_repo_components(request.repo_url, request.github_token)
+            if "error" in result:
+                yield f"data: {json.dumps({'type': 'error', 'message': result['error']})}\n\n"
+                return
+
+            files = result["files"]
+            if not files:
+                yield f"data: {json.dumps({'type': 'error', 'message': 'No React components found in repository'})}\n\n"
+                return
+
+            yield f"data: {json.dumps({'type': 'repo_info', 'repo': result['repo'], 'ref': result['ref'], 'total': len(files)})}\n\n"
+
+            for i, f in enumerate(files):
+                yield f"data: {json.dumps({'type': 'file_start', 'index': i + 1, 'total': len(files), 'path': f['path']})}\n\n"
+                async for event in run_review(
+                    code=f["content"],
+                    filename=f["filename"],
+                    language=f["language"],
+                ):
+                    yield f"data: {json.dumps(event)}\n\n"
+                yield f"data: {json.dumps({'type': 'file_done', 'index': i + 1, 'path': f['path']})}\n\n"
+
             yield "data: [DONE]\n\n"
         except Exception as e:
             yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
