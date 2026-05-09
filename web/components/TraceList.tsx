@@ -5,7 +5,7 @@ import { useState, useTransition, useDeferredValue, useCallback, memo, useRef } 
 type Span = Record<string, unknown>;
 type Trace = { trace_id: string; root: Span; spans: Span[] };
 
-const PAGE_SIZE = 15;
+const PAGE_SIZE = parseInt(process.env.NEXT_PUBLIC_TRACES_PAGE_SIZE ?? "15", 10) || 15;
 
 const STATUS_COLOR: Record<string, string> = {
   OK: "var(--ok)",

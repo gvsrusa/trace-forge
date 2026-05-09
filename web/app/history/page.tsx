@@ -3,8 +3,9 @@ import ReviewList from "@/components/ReviewList";
 const AGENT = process.env.AGENT_BACKEND_URL ?? process.env.NEXT_PUBLIC_AGENT_URL ?? "http://localhost:8080";
 
 async function getReviews() {
+  const limit = process.env.REVIEWS_FETCH_LIMIT ?? "200";
   try {
-    const res = await fetch(`${AGENT}/api/reviews?limit=200`, { cache: "no-store" });
+    const res = await fetch(`${AGENT}/api/reviews?limit=${limit}`, { cache: "no-store" });
     if (!res.ok) return [];
     const data = await res.json();
     return data.reviews ?? [];

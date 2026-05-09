@@ -18,7 +18,7 @@ type StrategyVersion = {
   base_strategy?: string;
 };
 
-const PAGE_SIZE = 15;
+const PAGE_SIZE = parseInt(process.env.NEXT_PUBLIC_STRATEGY_PAGE_SIZE ?? "15", 10) || 15;
 
 const ACTION_COLOR: Record<string, string> = {
   ADD_CHECK: "var(--ok)",

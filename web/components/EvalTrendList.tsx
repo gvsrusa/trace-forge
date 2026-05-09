@@ -23,7 +23,7 @@ type EnrichedTrend = EvalTrend & {
   deltaVsBest: number | null; // vs best run so far
 };
 
-const PAGE_SIZE = 15;
+const PAGE_SIZE = parseInt(process.env.NEXT_PUBLIC_EVALS_PAGE_SIZE ?? "15", 10) || 15;
 const SCORE_KEYS: (keyof Scores)[] = ["completeness", "accuracy", "actionability", "calibration"];
 const SCORE_COLOR: Record<keyof Scores, string> = {
   completeness: "#3b82f6",
