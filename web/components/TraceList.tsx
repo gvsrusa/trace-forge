@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition, useDeferredValue, useCallback, memo } from "react";
+import { useState, useTransition, useDeferredValue, useCallback, memo, useRef } from "react";
 
 type Span = Record<string, unknown>;
 type Trace = { trace_id: string; root: Span; spans: Span[] };
