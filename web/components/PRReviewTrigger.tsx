@@ -3,8 +3,9 @@
 import { useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 
-const AGENT_URL =
-  process.env.NEXT_PUBLIC_AGENT_URL ?? "http://localhost:8080";
+// Use the proxy route so the browser never needs to know the agent's Cloud Run URL.
+// /api/proxy/* is a Next.js route handler that forwards to AGENT_BACKEND_URL at runtime.
+const AGENT_URL = "/api/proxy";
 
 type EventLine =
   | { type: "started"; pr_url: string }
