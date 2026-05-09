@@ -46,10 +46,21 @@ const SpanRow = memo(function SpanRow({ span, depth }: { span: Span; depth: numb
   const status = String(span.status_code ?? "UNSET");
   const inputVal = attrs["input.value"] as string | undefined;
   const outputVal = attrs["output.value"] as string | undefined;
-  const tokenTotal = attrs["llm.token_count.total"] ?? attrs["gen_ai.usage.total_tokens"];
+  // ADK uses gen_ai.usage.input_tokens + output_tokens; OTel uses llm.token_count.total
+  const tokenIn = attrs["gen_ai.usage.input_tokens"] as number | undefined;
+  const tokenOut = attrs["gen_ai.usage.output_tokens"] as number | undefined;
+  const tokenTotal: number | string | undefined =
+    (attrs["llm.token_count.total"] as number | undefined) ??
+    (attrs["gen_ai.usage.total_tokens"] as number | undefined) ??
+    (tokenIn != null && tokenOut != null ? tokenIn + tokenOut : undefined) ??
+    (tokenIn ?? tokenOut);
   const agentName = attrs["agent.name"] ?? attrs["gen_ai.agent.name"];
   const sessionId = attrs["session.id"] ?? attrs["gen_ai.conversation.id"];
-  const hasDetail = !!(inputVal || outputVal || tokenTotal || agentName || sessionId);
+  // Tool call details (ADK execute_tool spans)
+  const toolName = attrs["tool.name"] ?? attrs["gen_ai.tool.name"] as string | undefined;
+  const toolDesc = attrs["tool.description"] as string | undefined;
+  const model = attrs["gen_ai.request.model"] ?? attrs["llm.model_name"] as string | undefined;
+  const hasDetail = !!(inputVal || outputVal || tokenTotal || agentName || sessionId || toolName || model);
 
   const toggle = useCallback(() => { if (hasDetail) setOpen((v) => !v); }, [hasDetail]);
 
@@ -59,9 +70,8 @@ const SpanRow = memo(function SpanRow({ span, depth }: { span: Span; depth: numb
         role={hasDetail ? "button" : undefined}
         tabIndex={hasDetail ? 0 : -1}
         aria-expanded={hasDetail ? open : undefined}
-        className="grid text-xs px-3 py-2.5 rounded"
+        className="trace-grid grid text-xs px-3 py-2.5 rounded"
         style={{
-          gridTemplateColumns: "2fr 80px 70px 150px 70px",
           background: open ? "var(--surface)" : "transparent",
           border: `1px solid ${open ? "var(--accent)" : "var(--border)"}`,
           color: "var(--text)",
@@ -78,10 +88,10 @@ const SpanRow = memo(function SpanRow({ span, depth }: { span: Span; depth: numb
           )}
           {name}
         </span>
-        <span style={{ color: KIND_COLOR[kind] ?? "var(--muted)" }}>{kind}</span>
-        <span style={{ color: STATUS_COLOR[status] ?? "var(--muted)" }}>{status}</span>
-        <span style={{ color: "var(--muted)" }}>{shortDateTime(span.start_time)}</span>
-        <span style={{ color: "var(--muted)" }}>{duration(span)}</span>
+        <span className="trace-col-mobile-hide" style={{ color: KIND_COLOR[kind] ?? "var(--muted)" }}>{kind}</span>
+        <span className="trace-col-mobile-hide" style={{ color: STATUS_COLOR[status] ?? "var(--muted)" }}>{status}</span>
+        <span className="trace-col-mobile-hide" style={{ color: "var(--muted)" }}>{shortDateTime(span.start_time)}</span>
+        <span className="trace-col-mobile-hide" style={{ color: "var(--muted)" }}>{duration(span)}</span>
       </div>
 
       {open && (
@@ -90,8 +100,18 @@ const SpanRow = memo(function SpanRow({ span, depth }: { span: Span; depth: numb
           style={{ background: "var(--bg)", border: "1px solid var(--border)", marginLeft: depth * 16 + 8 }}
         >
           {agentName ? <DetailRow label="Agent" value={String(agentName)} color="var(--accent)" /> : null}
+          {model ? <DetailRow label="Model" value={String(model)} color="var(--info)" /> : null}
+          {toolName ? <DetailRow label="Tool" value={String(toolName)} color="var(--warn)" /> : null}
+          {toolDesc ? <DetailRow label="Description" value={String(toolDesc)} /> : null}
           {sessionId ? <DetailRow label="Session" value={String(sessionId)} mono /> : null}
-          {tokenTotal ? <DetailRow label="Tokens" value={String(tokenTotal)} color="var(--ok)" /> : null}
+          {tokenTotal != null ? <DetailRow label="Tokens" value={String(tokenTotal)} color="var(--ok)" /> : null}
+          {tokenIn != null || tokenOut != null ? (
+            <DetailRow
+              label="Token split"
+              value={`↑ ${tokenIn ?? "?"} in  ↓ ${tokenOut ?? "?"} out`}
+              color="var(--muted)"
+            />
+          ) : null}
           {inputVal ? <JsonView label="Input" value={inputVal} maxHeight={200} /> : null}
           {outputVal ? <JsonView label="Output" value={outputVal} maxHeight={260} /> : null}
         </div>
@@ -295,9 +315,8 @@ const TraceRow = memo(function TraceRow({ trace }: { trace: Trace }) {
         role="button"
         tabIndex={0}
         aria-expanded={open}
-        className="grid text-xs px-3 py-2.5 rounded cursor-pointer"
+        className="trace-grid grid text-xs px-3 py-2.5 rounded cursor-pointer"
         style={{
-          gridTemplateColumns: "2fr 80px 70px 150px 70px",
           background: isError ? "rgba(239,68,68,0.04)" : "var(--surface)",
           border: `1px solid ${open ? "var(--accent)" : isError ? "rgba(239,68,68,0.35)" : "var(--border)"}`,
           color: "var(--text)",
@@ -320,10 +339,10 @@ const TraceRow = memo(function TraceRow({ trace }: { trace: Trace }) {
             </span>
           )}
         </span>
-        <span style={{ color: KIND_COLOR[kind] ?? "var(--muted)" }}>{kind}</span>
-        <span style={{ color: STATUS_COLOR[status] ?? "var(--muted)", fontWeight: isError ? 700 : 400 }}>{status}</span>
-        <span style={{ color: "var(--muted)" }}>{shortDateTime(root.start_time)}</span>
-        <span style={{ color: "var(--muted)" }}>{duration(root)}</span>
+        <span className="trace-col-mobile-hide" style={{ color: KIND_COLOR[kind] ?? "var(--muted)" }}>{kind}</span>
+        <span className="trace-col-mobile-hide" style={{ color: STATUS_COLOR[status] ?? "var(--muted)", fontWeight: isError ? 700 : 400 }}>{status}</span>
+        <span className="trace-col-mobile-hide" style={{ color: "var(--muted)" }}>{shortDateTime(root.start_time)}</span>
+        <span className="trace-col-mobile-hide" style={{ color: "var(--muted)" }}>{duration(root)}</span>
       </div>
 
       {open && (
@@ -504,20 +523,27 @@ export default function TraceList({ traces }: { traces: Record<string, unknown>[
 
       {/* Column header */}
       <div
-        className="grid text-xs font-semibold px-3 py-2 rounded"
+        className="trace-grid grid text-xs font-semibold px-3 py-2 rounded"
         style={{
-          gridTemplateColumns: "2fr 80px 70px 150px 70px",
           color: "var(--muted)",
           background: "var(--surface)",
           border: "1px solid var(--border)",
         }}
       >
-        <span>Trace / Span</span>
-        <span>Kind</span>
-        <span>Status</span>
-        <span>Started</span>
-        <span>Duration</span>
+        <span className="truncate">Trace / Span</span>
+        <span className="trace-col-mobile-hide">Kind</span>
+        <span className="trace-col-mobile-hide">Status</span>
+        <span className="trace-col-mobile-hide">Started</span>
+        <span className="trace-col-mobile-hide">Duration</span>
       </div>
+
+      <Pagination
+        page={deferredPage}
+        totalPages={totalPages}
+        total={filtered.length}
+        isPending={isPending || isStale}
+        onPage={goTo}
+      />
 
       {filtered.length === 0 ? (
         <div className="rounded p-4 text-xs text-center" style={{ background: "var(--surface)", border: "1px solid var(--border)", color: "var(--muted)" }}>
