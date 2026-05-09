@@ -146,7 +146,9 @@ def _fetch_traces(
     }}
     """
     data = _graphql(query)
-    edges = data.get("node", {}).get("spans", {}).get("edges", [])
+    spans_data = data.get("node", {}).get("spans", {})
+    page_info = spans_data.get("pageInfo", {})
+    edges = spans_data.get("edges", [])
     traces = []
     for edge in edges:
         root_node = edge.get("node", {})
@@ -167,24 +169,34 @@ def _fetch_traces(
 
         traces.append({"traceId": trace_id, "spans": all_spans})
 
-    return traces
+    return {
+        "traces": traces,
+        "page_info": {
+            "has_next_page": page_info.get("hasNextPage", False),
+            "end_cursor": page_info.get("endCursor") or "",
+        },
+    }
 
 
-def phoenix_query_traces(query: str = "", time_range: str = "7d", limit: int = 0) -> dict:
+def phoenix_query_traces(query: str = "", time_range: str = "7d", limit: int = 0, cursor: str = "") -> dict:
     """
     Query traces from Phoenix Cloud, sorted newest-first, one entry per trace.
     Uses rootSpansOnly so results match the Arize portal exactly.
-    limit=0 reads from PHOENIX_TRACES_LIMIT env var (default 50).
+    limit=0 reads from PHOENIX_TRACES_LIMIT env var (default 10).
+    Returns traces + page_info {has_next_page, end_cursor} for progressive loading.
     """
     api_key = os.environ.get("PHOENIX_API_KEY", "")
     if not api_key:
         return {"error": "PHOENIX_API_KEY not configured"}
 
-    resolved_limit = limit or int(os.environ.get("PHOENIX_TRACES_LIMIT", "50"))
+    resolved_limit = limit or int(os.environ.get("PHOENIX_TRACES_LIMIT", "10"))
     project = os.environ.get("PHOENIX_PROJECT_NAME", "traceforge")
     try:
-        traces = _fetch_traces(project, limit=resolved_limit)
-        return {"content": [{"type": "text", "text": json.dumps(traces)}]}
+        result = _fetch_traces(project, limit=resolved_limit, cursor=cursor or None)
+        return {
+            "content": [{"type": "text", "text": json.dumps(result["traces"])}],
+            "page_info": result["page_info"],
+        }
     except Exception as e:
         return {"error": f"Phoenix query failed: {e}"}
 

@@ -220,43 +220,16 @@ _traces_cache: dict = {"data": None, "at": 0.0}
 _TRACES_TTL = 45  # seconds
 
 
-# Only the attribute keys the TraceList UI renders — strip everything else to
-# keep the response well under Cloud Run's 32 MiB response size limit.
-_SPAN_ATTR_WHITELIST = frozenset({
-    "gen_ai.usage.input_tokens",
-    "gen_ai.usage.output_tokens",
-    "gen_ai.usage.total_tokens",
-    "llm.token_count.total",
-    "llm.token_count.prompt",
-    "llm.token_count.completion",
-    "gen_ai.request.model",
-    "llm.model_name",
-    "tool.name",
-    "gen_ai.tool.name",
-    "gen_ai.agent.name",
-    "session.id",
-    "input.value",
-    "output.value",
-})
-
-
-def _trim_span(span: dict) -> dict:
-    """Return a copy of span with attributes pruned to only the UI whitelist."""
-    raw_attrs = span.get("attributes", {})
-    trimmed = {k: v for k, v in raw_attrs.items() if k in _SPAN_ATTR_WHITELIST} if isinstance(raw_attrs, dict) else {}
-    return {**span, "attributes": trimmed}
-
-
 @app.get("/api/traces")
 async def get_traces(
     limit: int = Query(default=0, ge=0, description="Max traces to return; 0 uses PHOENIX_TRACES_LIMIT env var"),
     cursor: str = Query(default="", description="Pagination cursor from previous response"),
 ):
-    """Fetch recent traces from Phoenix Cloud via GraphQL, grouped by trace with all spans."""
+    """Fetch a page of traces from Phoenix Cloud. Returns has_next_page + end_cursor for progressive loading."""
     import time
     from tools.phoenix_query import phoenix_query_traces
 
-    # Only use cache for default (unpaginated) requests
+    # Only cache the default first page (no limit/cursor override)
     now = time.monotonic()
     use_cache = not limit and not cursor
     if use_cache and _traces_cache["data"] is not None and now - _traces_cache["at"] < _TRACES_TTL:
@@ -264,51 +237,49 @@ async def get_traces(
 
     try:
         result = await asyncio.get_event_loop().run_in_executor(
-            None, lambda: phoenix_query_traces(limit=limit)
+            None, lambda: phoenix_query_traces(limit=limit, cursor=cursor)
         )
     except Exception as e:
         return Response(
-            content=json.dumps({"error": f"Phoenix query failed: {e}", "traces": []}),
+            content=json.dumps({"error": f"Phoenix query failed: {e}", "traces": [], "has_next_page": False, "end_cursor": ""}),
             media_type="application/json",
             status_code=200,
         )
 
+    if isinstance(result, dict) and "error" in result:
+        return Response(
+            content=json.dumps({"error": result["error"], "traces": [], "has_next_page": False, "end_cursor": ""}),
+            media_type="application/json",
+            status_code=200,
+        )
+
+    page_info = result.get("page_info", {}) if isinstance(result, dict) else {}
     traces = []
-    if isinstance(result, dict):
-        if "error" in result:
-            return Response(
-                content=json.dumps({"error": result["error"], "traces": []}),
-                media_type="application/json",
-                status_code=200,
-            )
-        content = result.get("content", [])
-        if isinstance(content, list):
-            for item in content:
-                if isinstance(item, dict) and item.get("type") == "text":
-                    try:
-                        raw = json.loads(item.get("text", "[]"))
-                        if isinstance(raw, list):
-                            for trace in raw:
-                                trace_id = trace.get("traceId", "")
-                                all_spans = [
-                                    _trim_span({**s, "trace_id": trace_id})
-                                    for s in trace.get("spans", [])
-                                ]
-                                root = next(
-                                    (s for s in all_spans if s.get("parent_id") is None),
-                                    all_spans[0] if all_spans else None,
-                                )
-                                if root:
-                                    traces.append({
-                                        "trace_id": trace_id,
-                                        "root": root,
-                                        "spans": all_spans,
-                                    })
-                    except Exception:
-                        pass
+    content = result.get("content", []) if isinstance(result, dict) else []
+    for item in content:
+        if isinstance(item, dict) and item.get("type") == "text":
+            try:
+                raw = json.loads(item.get("text", "[]"))
+                if isinstance(raw, list):
+                    for trace in raw:
+                        trace_id = trace.get("traceId", "")
+                        all_spans = [{**s, "trace_id": trace_id} for s in trace.get("spans", [])]
+                        root = next(
+                            (s for s in all_spans if s.get("parent_id") is None),
+                            all_spans[0] if all_spans else None,
+                        )
+                        if root:
+                            traces.append({"trace_id": trace_id, "root": root, "spans": all_spans})
+            except Exception:
+                pass
 
     phoenix_base = os.environ.get("PHOENIX_COLLECTOR_ENDPOINT", "")
-    payload = {"traces": traces, "phoenix_base": phoenix_base}
+    payload = {
+        "traces": traces,
+        "phoenix_base": phoenix_base,
+        "has_next_page": page_info.get("has_next_page", False),
+        "end_cursor": page_info.get("end_cursor", ""),
+    }
     json_payload = json.dumps(payload)
 
     if use_cache:

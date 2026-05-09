@@ -4,9 +4,18 @@ export const dynamic = "force-dynamic";
 
 const AGENT = process.env.AGENT_BACKEND_URL ?? process.env.NEXT_PUBLIC_AGENT_URL ?? "http://localhost:8080";
 
-async function getTraces(): Promise<{ traces: Record<string, unknown>[]; phoenix_base?: string } | { error: string }> {
+// Small initial page — renders fast and stays well under Cloud Run's 32 MiB limit.
+// The client auto-fetches remaining pages in the background.
+const INITIAL_LIMIT = parseInt(process.env.TRACES_INITIAL_LIMIT ?? "10", 10) || 10;
+
+async function getTraces(): Promise<{
+  traces: Record<string, unknown>[];
+  phoenix_base?: string;
+  has_next_page?: boolean;
+  end_cursor?: string;
+} | { error: string }> {
   try {
-    const res = await fetch(`${AGENT}/api/traces`, { cache: "no-store" });
+    const res = await fetch(`${AGENT}/api/traces?limit=${INITIAL_LIMIT}`, { cache: "no-store" });
     if (!res.ok) return { error: `Agent backend returned ${res.status}` };
     return res.json();
   } catch (e) {
@@ -18,6 +27,8 @@ export default async function TracesPage() {
   const data = await getTraces();
   const fetchError = "error" in data ? data.error : null;
   const traces: Record<string, unknown>[] = "traces" in data ? data.traces : [];
+  const hasNextPage = "has_next_page" in data ? (data.has_next_page ?? false) : false;
+  const endCursor = "end_cursor" in data ? (data.end_cursor ?? "") : "";
   const phoenixBase: string = ("phoenix_base" in data ? data.phoenix_base ?? "https://app.phoenix.arize.com" : "https://app.phoenix.arize.com").replace(/\/$/, "");
   const phoenixTracesUrl = `${phoenixBase}/projects/traceforge/traces`;
 
@@ -64,7 +75,7 @@ export default async function TracesPage() {
           </p>
         </div>
       ) : (
-        <TraceList traces={traces} />
+        <TraceList traces={traces} hasNextPage={hasNextPage} endCursor={endCursor} />
       )}
     </div>
   );

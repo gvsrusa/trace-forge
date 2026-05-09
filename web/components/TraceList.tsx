@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition, useDeferredValue, useCallback, memo, useRef } from "react";
+import { useState, useTransition, useDeferredValue, useCallback, memo, useRef, useEffect } from "react";
 
 type Span = Record<string, unknown>;
 type Trace = { trace_id: string; root: Span; spans: Span[] };
@@ -449,14 +449,62 @@ function Pagination({
 
 type StatusFilter = "all" | "OK" | "ERROR" | "UNSET";
 
-export default function TraceList({ traces }: { traces: Record<string, unknown>[] }) {
+export default function TraceList({
+  traces: initialTraces,
+  hasNextPage: initHasNextPage = false,
+  endCursor: initEndCursor = "",
+}: {
+  traces: Record<string, unknown>[];
+  hasNextPage?: boolean;
+  endCursor?: string;
+}) {
+  const [allTraces, setAllTraces] = useState<Trace[]>(initialTraces as Trace[]);
+  const [bgLoading, setBgLoading] = useState(initHasNextPage);
+  const [bgLoaded, setBgLoaded] = useState(0);
+  const fetchingRef = useRef(false);
+
+  // Progressively load remaining pages in the background after first render
+  useEffect(() => {
+    if (!initHasNextPage || fetchingRef.current) return;
+    fetchingRef.current = true;
+
+    async function fetchRemaining() {
+      let cursor = initEndCursor;
+      let hasMore = initHasNextPage;
+      let loaded = 0;
+
+      while (hasMore) {
+        try {
+          const res = await fetch(`/api/proxy/api/traces?limit=10&cursor=${encodeURIComponent(cursor)}`);
+          if (!res.ok) break;
+          const data = await res.json();
+          const newTraces = (data.traces ?? []) as Trace[];
+          if (newTraces.length > 0) {
+            loaded += newTraces.length;
+            setBgLoaded(loaded);
+            setAllTraces(prev => [...prev, ...newTraces]);
+          }
+          hasMore = data.has_next_page ?? false;
+          cursor = data.end_cursor ?? "";
+          if (!cursor) break;
+        } catch {
+          break;
+        }
+      }
+      setBgLoading(false);
+      fetchingRef.current = false;
+    }
+
+    fetchRemaining();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   const [page, setPage] = useState(1);
   const [filter, setFilter] = useState<StatusFilter>("all");
   const [isPending, startTransition] = useTransition();
   const deferredPage = useDeferredValue(page);
   const isStale = deferredPage !== page;
 
-  const typed = traces as Trace[];
+  const typed = allTraces;
 
   const counts = { OK: 0, ERROR: 0, UNSET: 0 };
   for (const t of typed) {
@@ -564,6 +612,14 @@ export default function TraceList({ traces }: { traces: Record<string, unknown>[
         isPending={isPending || isStale}
         onPage={goTo}
       />
+
+      {bgLoading && (
+        <div className="flex items-center gap-2 px-3 py-2 text-xs rounded"
+          style={{ background: "var(--surface)", border: "1px solid var(--border)", color: "var(--muted)" }}>
+          <span style={{ animation: "spin 1s linear infinite", display: "inline-block" }}>⟳</span>
+          Loading more traces in background{bgLoaded > 0 ? ` (+${bgLoaded} loaded so far)` : "…"}
+        </div>
+      )}
     </div>
   );
 }
