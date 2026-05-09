@@ -165,6 +165,7 @@ export default function ComparisonView() {
   const [toV, setToV] = useState<number | null>(null);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setLoading(true);
     const params = new URLSearchParams({ component });
     if (fromV !== null) params.set("from_strategy", String(fromV));
