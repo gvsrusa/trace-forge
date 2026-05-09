@@ -7,7 +7,7 @@ from typing import AsyncGenerator
 
 import uvicorn
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
@@ -144,7 +144,7 @@ async def get_strategy():
     from db.firestore import get_current_strategy, get_strategy_history
     return {
         "current_strategy": await _run_sync(get_current_strategy),
-        "history": await _run_sync(get_strategy_history, limit=200),
+        "history": await _run_sync(get_strategy_history, limit=int(os.environ.get("STRATEGY_HISTORY_LIMIT", "200"))),
     }
 
 
@@ -152,7 +152,7 @@ async def get_strategy():
 async def get_improvement():
     from db.firestore import get_eval_trends, get_blind_spots
     return {
-        "eval_trends": await _run_sync(get_eval_trends, limit=200),
+        "eval_trends": await _run_sync(get_eval_trends, limit=int(os.environ.get("EVAL_TRENDS_LIMIT", "200"))),
         "blind_spots": await _run_sync(get_blind_spots),
     }
 
@@ -221,16 +221,23 @@ _TRACES_TTL = 45  # seconds
 
 
 @app.get("/api/traces")
-async def get_traces():
-    """Fetch recent traces from Phoenix Cloud via MCP, grouped by trace with all spans."""
+async def get_traces(
+    limit: int = Query(default=0, ge=0, description="Max traces to return; 0 uses PHOENIX_TRACES_LIMIT env var"),
+    cursor: str = Query(default="", description="Pagination cursor from previous response"),
+):
+    """Fetch recent traces from Phoenix Cloud via GraphQL, grouped by trace with all spans."""
     import time
     from tools.phoenix_query import phoenix_query_traces
 
+    # Only use cache for default (unpaginated) requests
     now = time.monotonic()
-    if _traces_cache["data"] is not None and now - _traces_cache["at"] < _TRACES_TTL:
+    use_cache = not limit and not cursor
+    if use_cache and _traces_cache["data"] is not None and now - _traces_cache["at"] < _TRACES_TTL:
         return _traces_cache["data"]
 
-    result = await asyncio.get_event_loop().run_in_executor(None, phoenix_query_traces)
+    result = await asyncio.get_event_loop().run_in_executor(
+        None, lambda: phoenix_query_traces(limit=limit)
+    )
     traces = []
     if isinstance(result, dict):
         content = result.get("content", [])
@@ -260,8 +267,9 @@ async def get_traces():
                         pass
     phoenix_base = os.environ.get("PHOENIX_COLLECTOR_ENDPOINT", "")
     payload = {"traces": traces, "phoenix_base": phoenix_base}
-    _traces_cache["data"] = payload
-    _traces_cache["at"] = now
+    if use_cache:
+        _traces_cache["data"] = payload
+        _traces_cache["at"] = now
     return payload
 
 
@@ -278,8 +286,10 @@ async def get_comparison(
         get_distinct_reviewed_filenames,
     )
 
-    all_reviews = await _run_sync(get_reviews_for_comparison, 200)
-    all_filenames = await _run_sync(get_distinct_reviewed_filenames, 100)
+    comparison_limit = int(os.environ.get("COMPARISON_REVIEWS_LIMIT", "200"))
+    filenames_limit = int(os.environ.get("COMPARISON_FILENAMES_LIMIT", "100"))
+    all_reviews = await _run_sync(get_reviews_for_comparison, comparison_limit)
+    all_filenames = await _run_sync(get_distinct_reviewed_filenames, filenames_limit)
 
     component_reviews = [
         r for r in all_reviews if r.get("filename") == component

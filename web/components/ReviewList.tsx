@@ -20,7 +20,7 @@ type Review = {
   code_snippet: string;
 };
 
-const PAGE_SIZE = 15;
+const PAGE_SIZE = parseInt(process.env.NEXT_PUBLIC_REVIEWS_PAGE_SIZE ?? "15", 10) || 15;
 const SCORE_KEYS: (keyof EvalScores)[] = ["completeness", "accuracy", "actionability", "calibration"];
 
 // ── Helpers ──────────────────────────────────────────────────────────────────

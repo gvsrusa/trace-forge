@@ -28,7 +28,7 @@ type PRReview = {
   timestamp: string;
 };
 
-const PAGE_SIZE = 10;
+const PAGE_SIZE = parseInt(process.env.NEXT_PUBLIC_PR_REVIEWS_PAGE_SIZE ?? "10", 10) || 10;
 
 function scoreColor(v: number): string {
   return v >= 0.9 ? "var(--ok)" : v >= 0.7 ? "var(--warn)" : "var(--error)";

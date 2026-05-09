@@ -4,8 +4,9 @@ import PRReviewTrigger from "@/components/PRReviewTrigger";
 const AGENT = process.env.AGENT_BACKEND_URL ?? process.env.NEXT_PUBLIC_AGENT_URL ?? "http://localhost:8080";
 
 async function getPRReviews() {
+  const limit = process.env.PR_REVIEWS_FETCH_LIMIT ?? "100";
   try {
-    const res = await fetch(`${AGENT}/api/pr-reviews?limit=100`, { cache: "no-store" });
+    const res = await fetch(`${AGENT}/api/pr-reviews?limit=${limit}`, { cache: "no-store" });
     if (!res.ok) return null;
     return res.json();
   } catch {
