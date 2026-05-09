@@ -70,9 +70,8 @@ const SpanRow = memo(function SpanRow({ span, depth }: { span: Span; depth: numb
         role={hasDetail ? "button" : undefined}
         tabIndex={hasDetail ? 0 : -1}
         aria-expanded={hasDetail ? open : undefined}
-        className="grid text-xs px-3 py-2.5 rounded"
+        className="trace-grid grid text-xs px-3 py-2.5 rounded"
         style={{
-          gridTemplateColumns: "2fr 80px 70px 150px 70px",
           background: open ? "var(--surface)" : "transparent",
           border: `1px solid ${open ? "var(--accent)" : "var(--border)"}`,
           color: "var(--text)",
@@ -89,10 +88,10 @@ const SpanRow = memo(function SpanRow({ span, depth }: { span: Span; depth: numb
           )}
           {name}
         </span>
-        <span style={{ color: KIND_COLOR[kind] ?? "var(--muted)" }}>{kind}</span>
-        <span style={{ color: STATUS_COLOR[status] ?? "var(--muted)" }}>{status}</span>
-        <span style={{ color: "var(--muted)" }}>{shortDateTime(span.start_time)}</span>
-        <span style={{ color: "var(--muted)" }}>{duration(span)}</span>
+        <span className="trace-col-mobile-hide" style={{ color: KIND_COLOR[kind] ?? "var(--muted)" }}>{kind}</span>
+        <span className="trace-col-mobile-hide" style={{ color: STATUS_COLOR[status] ?? "var(--muted)" }}>{status}</span>
+        <span className="trace-col-mobile-hide" style={{ color: "var(--muted)" }}>{shortDateTime(span.start_time)}</span>
+        <span className="trace-col-mobile-hide" style={{ color: "var(--muted)" }}>{duration(span)}</span>
       </div>
 
       {open && (
@@ -316,9 +315,8 @@ const TraceRow = memo(function TraceRow({ trace }: { trace: Trace }) {
         role="button"
         tabIndex={0}
         aria-expanded={open}
-        className="grid text-xs px-3 py-2.5 rounded cursor-pointer"
+        className="trace-grid grid text-xs px-3 py-2.5 rounded cursor-pointer"
         style={{
-          gridTemplateColumns: "2fr 80px 70px 150px 70px",
           background: isError ? "rgba(239,68,68,0.04)" : "var(--surface)",
           border: `1px solid ${open ? "var(--accent)" : isError ? "rgba(239,68,68,0.35)" : "var(--border)"}`,
           color: "var(--text)",
@@ -341,10 +339,10 @@ const TraceRow = memo(function TraceRow({ trace }: { trace: Trace }) {
             </span>
           )}
         </span>
-        <span style={{ color: KIND_COLOR[kind] ?? "var(--muted)" }}>{kind}</span>
-        <span style={{ color: STATUS_COLOR[status] ?? "var(--muted)", fontWeight: isError ? 700 : 400 }}>{status}</span>
-        <span style={{ color: "var(--muted)" }}>{shortDateTime(root.start_time)}</span>
-        <span style={{ color: "var(--muted)" }}>{duration(root)}</span>
+        <span className="trace-col-mobile-hide" style={{ color: KIND_COLOR[kind] ?? "var(--muted)" }}>{kind}</span>
+        <span className="trace-col-mobile-hide" style={{ color: STATUS_COLOR[status] ?? "var(--muted)", fontWeight: isError ? 700 : 400 }}>{status}</span>
+        <span className="trace-col-mobile-hide" style={{ color: "var(--muted)" }}>{shortDateTime(root.start_time)}</span>
+        <span className="trace-col-mobile-hide" style={{ color: "var(--muted)" }}>{duration(root)}</span>
       </div>
 
       {open && (
@@ -525,20 +523,27 @@ export default function TraceList({ traces }: { traces: Record<string, unknown>[
 
       {/* Column header */}
       <div
-        className="grid text-xs font-semibold px-3 py-2 rounded"
+        className="trace-grid grid text-xs font-semibold px-3 py-2 rounded"
         style={{
-          gridTemplateColumns: "2fr 80px 70px 150px 70px",
           color: "var(--muted)",
           background: "var(--surface)",
           border: "1px solid var(--border)",
         }}
       >
-        <span>Trace / Span</span>
-        <span>Kind</span>
-        <span>Status</span>
-        <span>Started</span>
-        <span>Duration</span>
+        <span className="truncate">Trace / Span</span>
+        <span className="trace-col-mobile-hide">Kind</span>
+        <span className="trace-col-mobile-hide">Status</span>
+        <span className="trace-col-mobile-hide">Started</span>
+        <span className="trace-col-mobile-hide">Duration</span>
       </div>
+
+      <Pagination
+        page={deferredPage}
+        totalPages={totalPages}
+        total={filtered.length}
+        isPending={isPending || isStale}
+        onPage={goTo}
+      />
 
       {filtered.length === 0 ? (
         <div className="rounded p-4 text-xs text-center" style={{ background: "var(--surface)", border: "1px solid var(--border)", color: "var(--muted)" }}>

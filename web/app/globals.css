@@ -19,3 +19,15 @@ body {
   font-family: ui-monospace, "JetBrains Mono", "Fira Code", monospace;
   min-height: 100vh;
 }
+
+.trace-grid {
+  grid-template-columns: 2fr 80px 70px 150px 70px;
+}
+@media (max-width: 767px) {
+  .trace-grid {
+    grid-template-columns: 1fr auto;
+  }
+  .trace-col-mobile-hide {
+    display: none;
+  }
+}
