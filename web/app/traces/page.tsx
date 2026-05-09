@@ -1,18 +1,10 @@
 import TraceList from "@/components/TraceList";
 
-const PHOENIX_BASE = "https://app.phoenix.arize.com/s/YOUR_SPACE";
-const PHOENIX_API = "https://app.phoenix.arize.com/s/YOUR_SPACE/v1";
-const PHOENIX_API_KEY = process.env.PHOENIX_API_KEY ?? "";
+const AGENT = process.env.AGENT_BACKEND_URL ?? process.env.NEXT_PUBLIC_AGENT_URL ?? "http://localhost:8080";
 
 async function getTraces() {
   try {
-    const res = await fetch(
-      `${PHOENIX_API}/spans?project_name=traceforge&limit=20`,
-      {
-        headers: { authorization: `Bearer ${PHOENIX_API_KEY}` },
-        cache: "no-store",
-      }
-    );
+    const res = await fetch(`${AGENT}/api/traces`, { cache: "no-store" });
     if (!res.ok) return null;
     return res.json();
   } catch {
@@ -22,7 +14,9 @@ async function getTraces() {
 
 export default async function TracesPage() {
   const data = await getTraces();
-  const spans: Record<string, unknown>[] = data?.data ?? [];
+  const traces: Record<string, unknown>[] = data?.traces ?? [];
+  const phoenixBase: string = (data?.phoenix_base ?? "https://app.phoenix.arize.com").replace(/\/$/, "");
+  const phoenixTracesUrl = `${phoenixBase}/projects/traceforge/traces`;
 
   return (
     <div className="flex flex-col gap-5">
@@ -32,11 +26,11 @@ export default async function TracesPage() {
             Trace Explorer
           </h1>
           <p className="text-xs mt-1" style={{ color: "var(--muted)" }}>
-            Every span, tool call, and LLM invocation from Phoenix Cloud.
+            Every span, tool call, and LLM invocation — click a trace to expand.
           </p>
         </div>
         <a
-          href={`${PHOENIX_BASE}/projects/traceforge/traces`}
+          href={phoenixTracesUrl}
           target="_blank"
           rel="noreferrer"
           className="px-4 py-2 rounded text-sm font-semibold"
@@ -46,29 +40,17 @@ export default async function TracesPage() {
         </a>
       </div>
 
-      {spans.length === 0 ? (
+      {traces.length === 0 ? (
         <div
           className="rounded p-8 flex flex-col items-center gap-4"
           style={{ background: "var(--surface)", border: "1px solid var(--border)" }}
         >
           <p className="text-sm" style={{ color: "var(--muted)" }}>
-            No traces yet — run a review to generate spans.
+            No traces loaded — run a review to generate traces.
           </p>
-          <p className="text-xs" style={{ color: "var(--muted)" }}>
-            Or view them directly in Phoenix Cloud:
-          </p>
-          <a
-            href={`${PHOENIX_BASE}/projects/traceforge/traces`}
-            target="_blank"
-            rel="noreferrer"
-            className="px-5 py-2.5 rounded text-sm font-semibold"
-            style={{ background: "var(--accent)", color: "#fff" }}
-          >
-            Open Phoenix Cloud ↗
-          </a>
         </div>
       ) : (
-        <TraceList spans={spans} phoenixBase={PHOENIX_BASE} />
+        <TraceList traces={traces} />
       )}
     </div>
   );

@@ -22,15 +22,15 @@ TraceForge reviews React components across 4 dimensions — performance, accessi
 5. Repeat    → next review loads latest strategy → improved coverage
 ```
 
-After 11 reviews the agent had updated its strategy to v17, adding specific checks for icon-only button labels, memoization chain verification, and inline style detection — none of which were in the original prompt.
+After 50+ reviews the agent has updated its strategy to v58, adding specific checks for icon-only button labels, memoization chain verification, inline style detection, and dozens more — none of which were in the original prompt.
 
 ---
 
 ## Screenshots
 
-| Review (live streaming) | Self-Improvement chart | Strategy versions |
+| Review (live streaming) | Self-Improvement chart | Before/After Comparison |
 |---|---|---|
-| Agent streams tool calls + report in real time | Eval scores across 11 runs | v17 with full version history |
+| Agent streams tool calls + report in real time | Eval scores across 50+ runs | v1 vs v58 — what the agent learned |
 
 ---
 
