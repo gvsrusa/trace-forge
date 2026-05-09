@@ -101,7 +101,7 @@ def _fetch_traces(
     project_name: str,
     limit: int = 50,
     cursor: str | None = None,
-    max_spans_per_trace: int = 200,
+    max_spans_per_trace: int = 50,
 ) -> list[dict]:
     """Fetch traces from Phoenix using rootSpansOnly, sorted newest-first.
 

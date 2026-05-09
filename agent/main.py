@@ -220,6 +220,33 @@ _traces_cache: dict = {"data": None, "at": 0.0}
 _TRACES_TTL = 45  # seconds
 
 
+# Only the attribute keys the TraceList UI renders — strip everything else to
+# keep the response well under Cloud Run's 32 MiB response size limit.
+_SPAN_ATTR_WHITELIST = frozenset({
+    "gen_ai.usage.input_tokens",
+    "gen_ai.usage.output_tokens",
+    "gen_ai.usage.total_tokens",
+    "llm.token_count.total",
+    "llm.token_count.prompt",
+    "llm.token_count.completion",
+    "gen_ai.request.model",
+    "llm.model_name",
+    "tool.name",
+    "gen_ai.tool.name",
+    "gen_ai.agent.name",
+    "session.id",
+    "input.value",
+    "output.value",
+})
+
+
+def _trim_span(span: dict) -> dict:
+    """Return a copy of span with attributes pruned to only the UI whitelist."""
+    raw_attrs = span.get("attributes", {})
+    trimmed = {k: v for k, v in raw_attrs.items() if k in _SPAN_ATTR_WHITELIST} if isinstance(raw_attrs, dict) else {}
+    return {**span, "attributes": trimmed}
+
+
 @app.get("/api/traces")
 async def get_traces(
     limit: int = Query(default=0, ge=0, description="Max traces to return; 0 uses PHOENIX_TRACES_LIMIT env var"),
@@ -235,11 +262,25 @@ async def get_traces(
     if use_cache and _traces_cache["data"] is not None and now - _traces_cache["at"] < _TRACES_TTL:
         return Response(content=_traces_cache["data"], media_type="application/json")
 
-    result = await asyncio.get_event_loop().run_in_executor(
-        None, lambda: phoenix_query_traces(limit=limit)
-    )
+    try:
+        result = await asyncio.get_event_loop().run_in_executor(
+            None, lambda: phoenix_query_traces(limit=limit)
+        )
+    except Exception as e:
+        return Response(
+            content=json.dumps({"error": f"Phoenix query failed: {e}", "traces": []}),
+            media_type="application/json",
+            status_code=200,
+        )
+
     traces = []
     if isinstance(result, dict):
+        if "error" in result:
+            return Response(
+                content=json.dumps({"error": result["error"], "traces": []}),
+                media_type="application/json",
+                status_code=200,
+            )
         content = result.get("content", [])
         if isinstance(content, list):
             for item in content:
@@ -250,7 +291,7 @@ async def get_traces(
                             for trace in raw:
                                 trace_id = trace.get("traceId", "")
                                 all_spans = [
-                                    {**s, "trace_id": trace_id}
+                                    _trim_span({**s, "trace_id": trace_id})
                                     for s in trace.get("spans", [])
                                 ]
                                 root = next(
@@ -265,18 +306,15 @@ async def get_traces(
                                     })
                     except Exception:
                         pass
+
     phoenix_base = os.environ.get("PHOENIX_COLLECTOR_ENDPOINT", "")
     payload = {"traces": traces, "phoenix_base": phoenix_base}
-    
-    # Serialize to JSON string manually to bypass FastAPI's slow jsonable_encoder
-    # which can consume massive amounts of memory and block the event loop for large traces.
     json_payload = json.dumps(payload)
-    
+
     if use_cache:
-        # Cache the string directly to save memory/serialization time on cache hits
         _traces_cache["data"] = json_payload
         _traces_cache["at"] = now
-        
+
     return Response(content=json_payload, media_type="application/json")
 
 
