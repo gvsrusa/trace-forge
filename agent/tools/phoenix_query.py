@@ -74,13 +74,29 @@ def _flatten(obj: dict, prefix: str = "") -> dict:
     return out
 
 
+# Cap individual string attribute values to keep response under Cloud Run's 32 MiB limit.
+# LLM input/output blobs (full code files + review text) can be 100KB+ each.
+# 8 KB per value × ~15 spans × ~15 traces per page ≈ 1.8 MB — safely under the limit.
+_MAX_ATTR_CHARS = 8_192
+
+
+def _truncate_attrs(attrs: dict) -> dict:
+    out = {}
+    for k, v in attrs.items():
+        if isinstance(v, str) and len(v) > _MAX_ATTR_CHARS:
+            out[k] = v[:_MAX_ATTR_CHARS] + f" … [truncated, {len(v)} chars total]"
+        else:
+            out[k] = v
+    return out
+
+
 def _parse_span(n: dict) -> dict:
     """Normalise a raw GraphQL span node to a flat dict."""
     ctx = n.get("context") or {}
     raw_attrs = n.get("attributes", "")
     try:
         raw = json.loads(raw_attrs) if isinstance(raw_attrs, str) and raw_attrs else raw_attrs or {}
-        attrs = _flatten(raw) if isinstance(raw, dict) else {}
+        attrs = _truncate_attrs(_flatten(raw)) if isinstance(raw, dict) else {}
     except Exception:
         attrs = {}
     return {
