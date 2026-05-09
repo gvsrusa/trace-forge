@@ -1,6 +1,8 @@
 import PRReviewList from "@/components/PRReviewList";
 import PRReviewTrigger from "@/components/PRReviewTrigger";
 
+export const dynamic = "force-dynamic";
+
 const AGENT = process.env.AGENT_BACKEND_URL ?? process.env.NEXT_PUBLIC_AGENT_URL ?? "http://localhost:8080";
 
 async function getPRReviews() {

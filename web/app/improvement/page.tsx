@@ -2,6 +2,8 @@ import ImprovementCharts from "@/components/ImprovementCharts";
 import EvalTrendList from "@/components/EvalTrendList";
 import ComparisonView from "@/components/ComparisonView";
 
+export const dynamic = "force-dynamic";
+
 const AGENT = process.env.AGENT_BACKEND_URL ?? process.env.NEXT_PUBLIC_AGENT_URL ?? "http://localhost:8080";
 
 async function getImprovement() {
