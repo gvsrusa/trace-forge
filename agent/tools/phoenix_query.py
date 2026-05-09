@@ -189,7 +189,7 @@ def phoenix_query_traces(query: str = "", time_range: str = "7d", limit: int = 0
     if not api_key:
         return {"error": "PHOENIX_API_KEY not configured"}
 
-    resolved_limit = limit or int(os.environ.get("PHOENIX_TRACES_LIMIT", "10"))
+    resolved_limit = limit or int(os.environ.get("PHOENIX_TRACES_LIMIT", "15"))
     project = os.environ.get("PHOENIX_PROJECT_NAME", "traceforge")
     try:
         result = _fetch_traces(project, limit=resolved_limit, cursor=cursor or None)
