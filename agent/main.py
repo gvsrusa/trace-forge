@@ -9,7 +9,7 @@ import uvicorn
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, Response
 from pydantic import BaseModel
 
 from instrumentation import setup_tracing
@@ -233,7 +233,7 @@ async def get_traces(
     now = time.monotonic()
     use_cache = not limit and not cursor
     if use_cache and _traces_cache["data"] is not None and now - _traces_cache["at"] < _TRACES_TTL:
-        return _traces_cache["data"]
+        return Response(content=_traces_cache["data"], media_type="application/json")
 
     result = await asyncio.get_event_loop().run_in_executor(
         None, lambda: phoenix_query_traces(limit=limit)
@@ -267,10 +267,17 @@ async def get_traces(
                         pass
     phoenix_base = os.environ.get("PHOENIX_COLLECTOR_ENDPOINT", "")
     payload = {"traces": traces, "phoenix_base": phoenix_base}
+    
+    # Serialize to JSON string manually to bypass FastAPI's slow jsonable_encoder
+    # which can consume massive amounts of memory and block the event loop for large traces.
+    json_payload = json.dumps(payload)
+    
     if use_cache:
-        _traces_cache["data"] = payload
+        # Cache the string directly to save memory/serialization time on cache hits
+        _traces_cache["data"] = json_payload
         _traces_cache["at"] = now
-    return payload
+        
+    return Response(content=json_payload, media_type="application/json")
 
 
 @app.get("/api/comparison")
