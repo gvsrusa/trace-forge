@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition, useDeferredValue, useCallback, memo, useRef, useEffect } from "react";
+import { useState, useTransition, useDeferredValue, useCallback, memo } from "react";
 
 type Span = Record<string, unknown>;
 type Trace = { trace_id: string; root: Span; spans: Span[] };
@@ -459,44 +459,29 @@ export default function TraceList({
   endCursor?: string;
 }) {
   const [allTraces, setAllTraces] = useState<Trace[]>(initialTraces as Trace[]);
-  const [bgLoading, setBgLoading] = useState(initHasNextPage);
-  const [bgLoaded, setBgLoaded] = useState(0);
-  const fetchingRef = useRef(false);
+  const [cursor, setCursor] = useState(initEndCursor);
+  const [hasMore, setHasMore] = useState(initHasNextPage);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [loadError, setLoadError] = useState("");
 
-  // Progressively load remaining pages in the background after first render
-  useEffect(() => {
-    if (!initHasNextPage || fetchingRef.current) return;
-    fetchingRef.current = true;
-
-    async function fetchRemaining() {
-      let cursor = initEndCursor;
-      let hasMore = initHasNextPage;
-      let loaded = 0;
-
-      while (hasMore) {
-        try {
-          const res = await fetch(`/api/proxy/api/traces?limit=10&cursor=${encodeURIComponent(cursor)}`);
-          if (!res.ok) break;
-          const data = await res.json();
-          const newTraces = (data.traces ?? []) as Trace[];
-          if (newTraces.length > 0) {
-            loaded += newTraces.length;
-            setBgLoaded(loaded);
-            setAllTraces(prev => [...prev, ...newTraces]);
-          }
-          hasMore = data.has_next_page ?? false;
-          cursor = data.end_cursor ?? "";
-          if (!cursor) break;
-        } catch {
-          break;
-        }
-      }
-      setBgLoading(false);
-      fetchingRef.current = false;
+  async function loadMore() {
+    if (!cursor || loadingMore) return;
+    setLoadingMore(true);
+    setLoadError("");
+    try {
+      const res = await fetch(`/api/proxy/api/traces?limit=15&cursor=${encodeURIComponent(cursor)}`);
+      if (!res.ok) throw new Error(`Server returned ${res.status}`);
+      const data = await res.json();
+      const newTraces = (data.traces ?? []) as Trace[];
+      setAllTraces(prev => [...prev, ...newTraces]);
+      setHasMore(data.has_next_page ?? false);
+      setCursor(data.end_cursor ?? "");
+    } catch (e) {
+      setLoadError(e instanceof Error ? e.message : "Failed to load more traces");
+    } finally {
+      setLoadingMore(false);
     }
-
-    fetchRemaining();
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }
 
   const [page, setPage] = useState(1);
   const [filter, setFilter] = useState<StatusFilter>("all");
@@ -613,12 +598,27 @@ export default function TraceList({
         onPage={goTo}
       />
 
-      {bgLoading && (
-        <div className="flex items-center gap-2 px-3 py-2 text-xs rounded"
-          style={{ background: "var(--surface)", border: "1px solid var(--border)", color: "var(--muted)" }}>
-          <span style={{ animation: "spin 1s linear infinite", display: "inline-block" }}>⟳</span>
-          Loading more traces in background{bgLoaded > 0 ? ` (+${bgLoaded} loaded so far)` : "…"}
-        </div>
+      {loadError && (
+        <p className="text-xs text-center py-2" style={{ color: "var(--error)" }}>
+          {loadError} — <button onClick={loadMore} style={{ color: "var(--accent)", background: "none", border: "none", cursor: "pointer", textDecoration: "underline" }}>Retry</button>
+        </p>
+      )}
+
+      {hasMore && !loadError && (
+        <button
+          onClick={loadMore}
+          disabled={loadingMore}
+          className="w-full py-2.5 rounded text-sm font-semibold"
+          style={{
+            background: "var(--surface)",
+            border: "1px solid var(--border)",
+            color: loadingMore ? "var(--muted)" : "var(--accent)",
+            cursor: loadingMore ? "not-allowed" : "pointer",
+            opacity: loadingMore ? 0.7 : 1,
+          }}
+        >
+          {loadingMore ? "Loading…" : `Load more traces (${allTraces.length} loaded so far)`}
+        </button>
       )}
     </div>
   );

@@ -4,9 +4,9 @@ export const dynamic = "force-dynamic";
 
 const AGENT = process.env.AGENT_BACKEND_URL ?? process.env.NEXT_PUBLIC_AGENT_URL ?? "http://localhost:8080";
 
-// Small initial page — renders fast and stays well under Cloud Run's 32 MiB limit.
-// The client auto-fetches remaining pages in the background.
-const INITIAL_LIMIT = parseInt(process.env.TRACES_INITIAL_LIMIT ?? "10", 10) || 10;
+// One full display page on first paint — fast and well under Cloud Run's 32 MiB limit.
+// The client fetches more on demand via the "Load More" button.
+const INITIAL_LIMIT = parseInt(process.env.TRACES_INITIAL_LIMIT ?? "15", 10) || 15;
 
 async function getTraces(): Promise<{
   traces: Record<string, unknown>[];
