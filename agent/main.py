@@ -28,6 +28,7 @@ app.add_middleware(
 )
 
 
+
 class ReviewRequest(BaseModel):
     code: str
     filename: str = "component.tsx"
@@ -43,6 +44,16 @@ class FeedbackRequest(BaseModel):
     finding_id: str
     action: str  # "approve" | "reject" | "modify"
     note: str = ""
+
+
+class PRFeedbackRequest(BaseModel):
+    comment_id: str
+    reaction: str  # "thumbs_up" | "thumbs_down"
+    github_login: str = ""
+
+
+class PRTriggerRequest(BaseModel):
+    pr_url: str  # https://github.com/owner/repo/pull/N
 
 
 def _run_sync(fn, *args, **kwargs):
@@ -133,7 +144,7 @@ async def get_strategy():
     from db.firestore import get_current_strategy, get_strategy_history
     return {
         "current_strategy": await _run_sync(get_current_strategy),
-        "history": await _run_sync(get_strategy_history, limit=10),
+        "history": await _run_sync(get_strategy_history, limit=200),
     }
 
 
@@ -141,7 +152,7 @@ async def get_strategy():
 async def get_improvement():
     from db.firestore import get_eval_trends, get_blind_spots
     return {
-        "eval_trends": await _run_sync(get_eval_trends),
+        "eval_trends": await _run_sync(get_eval_trends, limit=200),
         "blind_spots": await _run_sync(get_blind_spots),
     }
 
@@ -151,6 +162,172 @@ async def submit_feedback(review_id: str, feedback: FeedbackRequest):
     from db.firestore import save_feedback
     await _run_sync(save_feedback, review_id, feedback.model_dump())
     return {"updated": True}
+
+
+@app.post("/api/pr-reviews/trigger")
+async def trigger_pr_review(request: PRTriggerRequest):
+    """Trigger an on-demand review of a public GitHub PR. Streams SSE progress events."""
+    from github.public_client import parse_pr_url
+
+    try:
+        parse_pr_url(request.pr_url)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    async def event_stream() -> AsyncGenerator[str, None]:
+        try:
+            from github.pr_handler import handle_pr_url
+            yield f"data: {json.dumps({'type': 'started', 'pr_url': request.pr_url})}\n\n"
+            async for event in handle_pr_url(request.pr_url):
+                yield f"data: {json.dumps(event)}\n\n"
+            yield "data: [DONE]\n\n"
+        except Exception as e:
+            yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
+
+    return StreamingResponse(event_stream(), media_type="text/event-stream")
+
+
+@app.get("/api/pr-reviews")
+async def list_pr_reviews(limit: int = 20, offset: int = 0):
+    from db.firestore import get_pr_reviews
+    reviews = await _run_sync(get_pr_reviews, limit=limit, offset=offset)
+    return {"pr_reviews": reviews, "total": len(reviews)}
+
+
+@app.get("/api/pr-reviews/{pr_review_id}")
+async def get_pr_review(pr_review_id: str):
+    from db.firestore import get_pr_review_by_id
+    review = await _run_sync(get_pr_review_by_id, pr_review_id)
+    if not review:
+        raise HTTPException(status_code=404, detail="PR review not found")
+    return review
+
+
+@app.post("/api/pr-reviews/{pr_review_id}/feedback")
+async def submit_pr_feedback(pr_review_id: str, feedback: PRFeedbackRequest):
+    from db.firestore import save_pr_feedback
+    await _run_sync(
+        save_pr_feedback,
+        pr_review_id,
+        feedback.comment_id,
+        feedback.reaction,
+        feedback.github_login,
+    )
+    return {"updated": True}
+
+
+_traces_cache: dict = {"data": None, "at": 0.0}
+_TRACES_TTL = 45  # seconds
+
+
+@app.get("/api/traces")
+async def get_traces():
+    """Fetch recent traces from Phoenix Cloud via MCP, grouped by trace with all spans."""
+    import time
+    from tools.phoenix_query import phoenix_query_traces
+
+    now = time.monotonic()
+    if _traces_cache["data"] is not None and now - _traces_cache["at"] < _TRACES_TTL:
+        return _traces_cache["data"]
+
+    result = await asyncio.get_event_loop().run_in_executor(None, phoenix_query_traces)
+    traces = []
+    if isinstance(result, dict):
+        content = result.get("content", [])
+        if isinstance(content, list):
+            for item in content:
+                if isinstance(item, dict) and item.get("type") == "text":
+                    try:
+                        raw = json.loads(item.get("text", "[]"))
+                        if isinstance(raw, list):
+                            for trace in raw:
+                                trace_id = trace.get("traceId", "")
+                                all_spans = [
+                                    {**s, "trace_id": trace_id}
+                                    for s in trace.get("spans", [])
+                                ]
+                                root = next(
+                                    (s for s in all_spans if s.get("parent_id") is None),
+                                    all_spans[0] if all_spans else None,
+                                )
+                                if root:
+                                    traces.append({
+                                        "trace_id": trace_id,
+                                        "root": root,
+                                        "spans": all_spans,
+                                    })
+                    except Exception:
+                        pass
+    phoenix_base = os.environ.get("PHOENIX_COLLECTOR_ENDPOINT", "")
+    payload = {"traces": traces, "phoenix_base": phoenix_base}
+    _traces_cache["data"] = payload
+    _traces_cache["at"] = now
+    return payload
+
+
+@app.get("/api/comparison")
+async def get_comparison(
+    component: str = "ProductCard.tsx",
+    from_strategy: int | None = None,
+    to_strategy: int | None = None,
+):
+    """Return before/after review data for a component across strategy versions."""
+    from db.firestore import (
+        get_reviews_for_comparison,
+        get_strategy_range,
+        get_distinct_reviewed_filenames,
+    )
+
+    all_reviews = await _run_sync(get_reviews_for_comparison, 200)
+    all_filenames = await _run_sync(get_distinct_reviewed_filenames, 100)
+
+    component_reviews = [
+        r for r in all_reviews if r.get("filename") == component
+    ]
+    component_reviews.sort(key=lambda r: r.get("strategy_version", 0))
+
+    if not component_reviews:
+        return {
+            "error": f"No reviews found for {component}",
+            "available_components": all_filenames,
+        }
+
+    versions = sorted({r.get("strategy_version", 0) for r in component_reviews})
+    actual_from = from_strategy if from_strategy is not None else versions[0]
+    actual_to = to_strategy if to_strategy is not None else versions[-1]
+
+    def closest(reviews: list[dict], target: int) -> dict:
+        return min(reviews, key=lambda r: abs(r.get("strategy_version", 0) - target))
+
+    from_review = closest(component_reviews, actual_from)
+    to_review = closest(component_reviews, actual_to)
+
+    from_v = from_review.get("strategy_version", actual_from)
+    to_v = to_review.get("strategy_version", actual_to)
+
+    mutations: list[dict] = []
+    if from_v < to_v:
+        strategy_docs = await _run_sync(get_strategy_range, from_v + 1, to_v)
+        for s in strategy_docs:
+            for adj in s.get("adjustments", []):
+                mutations.append({**adj, "strategy_version": s.get("version")})
+
+    return {
+        "from_review": from_review,
+        "to_review": to_review,
+        "from_version": from_v,
+        "to_version": to_v,
+        "strategy_mutations": mutations,
+        "available_versions": versions,
+        "available_components": all_filenames,
+    }
+
+
+@app.get("/api/comparison/components")
+async def get_comparison_components():
+    from db.firestore import get_distinct_reviewed_filenames
+    names = await _run_sync(get_distinct_reviewed_filenames, 100)
+    return {"components": names}
 
 
 if __name__ == "__main__":
