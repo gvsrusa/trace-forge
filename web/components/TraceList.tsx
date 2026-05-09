@@ -89,11 +89,11 @@ const SpanRow = memo(function SpanRow({ span, depth }: { span: Span; depth: numb
           className="rounded text-xs flex flex-col gap-3 px-4 py-3"
           style={{ background: "var(--bg)", border: "1px solid var(--border)", marginLeft: depth * 16 + 8 }}
         >
-          {agentName && <DetailRow label="Agent" value={String(agentName)} color="var(--accent)" />}
-          {sessionId && <DetailRow label="Session" value={String(sessionId)} mono />}
-          {tokenTotal && <DetailRow label="Tokens" value={String(tokenTotal)} color="var(--ok)" />}
-          {inputVal && <JsonView label="Input" value={inputVal} maxHeight={200} />}
-          {outputVal && <JsonView label="Output" value={outputVal} maxHeight={260} />}
+          {agentName ? <DetailRow label="Agent" value={String(agentName)} color="var(--accent)" /> : null}
+          {sessionId ? <DetailRow label="Session" value={String(sessionId)} mono /> : null}
+          {tokenTotal ? <DetailRow label="Tokens" value={String(tokenTotal)} color="var(--ok)" /> : null}
+          {inputVal ? <JsonView label="Input" value={inputVal} maxHeight={200} /> : null}
+          {outputVal ? <JsonView label="Output" value={outputVal} maxHeight={260} /> : null}
         </div>
       )}
     </>
@@ -521,7 +521,7 @@ export default function TraceList({ traces }: { traces: Record<string, unknown>[
 
       {filtered.length === 0 ? (
         <div className="rounded p-4 text-xs text-center" style={{ background: "var(--surface)", border: "1px solid var(--border)", color: "var(--muted)" }}>
-          No traces with status "{filter}"
+          No traces with status &quot;{filter}&quot;
         </div>
       ) : (
         <div style={{ opacity: isStale ? 0.5 : 1, transition: "opacity 200ms" }}>
