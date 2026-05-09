@@ -58,12 +58,29 @@ def _resolve_project_id(project_name: str) -> str | None:
     return _project_id_cache.get(project_name)
 
 
+def _flatten(obj: dict, prefix: str = "") -> dict:
+    """Recursively flatten a nested dict into dot-notation keys.
+
+    ADK stores attributes as nested objects ({"gen_ai": {"agent": {"name": "x"}}})
+    but the UI expects OTel-style flat keys ("gen_ai.agent.name").
+    """
+    out: dict = {}
+    for k, v in obj.items():
+        key = f"{prefix}.{k}" if prefix else k
+        if isinstance(v, dict):
+            out.update(_flatten(v, key))
+        else:
+            out[key] = v
+    return out
+
+
 def _parse_span(n: dict) -> dict:
     """Normalise a raw GraphQL span node to a flat dict."""
     ctx = n.get("context") or {}
     raw_attrs = n.get("attributes", "")
     try:
-        attrs = json.loads(raw_attrs) if isinstance(raw_attrs, str) and raw_attrs else raw_attrs or {}
+        raw = json.loads(raw_attrs) if isinstance(raw_attrs, str) and raw_attrs else raw_attrs or {}
+        attrs = _flatten(raw) if isinstance(raw, dict) else {}
     except Exception:
         attrs = {}
     return {

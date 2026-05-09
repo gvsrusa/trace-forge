@@ -46,10 +46,21 @@ const SpanRow = memo(function SpanRow({ span, depth }: { span: Span; depth: numb
   const status = String(span.status_code ?? "UNSET");
   const inputVal = attrs["input.value"] as string | undefined;
   const outputVal = attrs["output.value"] as string | undefined;
-  const tokenTotal = attrs["llm.token_count.total"] ?? attrs["gen_ai.usage.total_tokens"];
+  // ADK uses gen_ai.usage.input_tokens + output_tokens; OTel uses llm.token_count.total
+  const tokenIn = attrs["gen_ai.usage.input_tokens"] as number | undefined;
+  const tokenOut = attrs["gen_ai.usage.output_tokens"] as number | undefined;
+  const tokenTotal: number | string | undefined =
+    (attrs["llm.token_count.total"] as number | undefined) ??
+    (attrs["gen_ai.usage.total_tokens"] as number | undefined) ??
+    (tokenIn != null && tokenOut != null ? tokenIn + tokenOut : undefined) ??
+    (tokenIn ?? tokenOut);
   const agentName = attrs["agent.name"] ?? attrs["gen_ai.agent.name"];
   const sessionId = attrs["session.id"] ?? attrs["gen_ai.conversation.id"];
-  const hasDetail = !!(inputVal || outputVal || tokenTotal || agentName || sessionId);
+  // Tool call details (ADK execute_tool spans)
+  const toolName = attrs["tool.name"] ?? attrs["gen_ai.tool.name"] as string | undefined;
+  const toolDesc = attrs["tool.description"] as string | undefined;
+  const model = attrs["gen_ai.request.model"] ?? attrs["llm.model_name"] as string | undefined;
+  const hasDetail = !!(inputVal || outputVal || tokenTotal || agentName || sessionId || toolName || model);
 
   const toggle = useCallback(() => { if (hasDetail) setOpen((v) => !v); }, [hasDetail]);
 
@@ -90,8 +101,18 @@ const SpanRow = memo(function SpanRow({ span, depth }: { span: Span; depth: numb
           style={{ background: "var(--bg)", border: "1px solid var(--border)", marginLeft: depth * 16 + 8 }}
         >
           {agentName ? <DetailRow label="Agent" value={String(agentName)} color="var(--accent)" /> : null}
+          {model ? <DetailRow label="Model" value={String(model)} color="var(--info)" /> : null}
+          {toolName ? <DetailRow label="Tool" value={String(toolName)} color="var(--warn)" /> : null}
+          {toolDesc ? <DetailRow label="Description" value={String(toolDesc)} /> : null}
           {sessionId ? <DetailRow label="Session" value={String(sessionId)} mono /> : null}
-          {tokenTotal ? <DetailRow label="Tokens" value={String(tokenTotal)} color="var(--ok)" /> : null}
+          {tokenTotal != null ? <DetailRow label="Tokens" value={String(tokenTotal)} color="var(--ok)" /> : null}
+          {tokenIn != null || tokenOut != null ? (
+            <DetailRow
+              label="Token split"
+              value={`↑ ${tokenIn ?? "?"} in  ↓ ${tokenOut ?? "?"} out`}
+              color="var(--muted)"
+            />
+          ) : null}
           {inputVal ? <JsonView label="Input" value={inputVal} maxHeight={200} /> : null}
           {outputVal ? <JsonView label="Output" value={outputVal} maxHeight={260} /> : null}
         </div>
