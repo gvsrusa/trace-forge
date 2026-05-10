@@ -237,7 +237,7 @@ async def get_traces(
 
     try:
         result = await asyncio.get_event_loop().run_in_executor(
-            None, lambda: phoenix_query_traces(limit=limit, cursor=cursor)
+            None, lambda: phoenix_query_traces(limit=limit, cursor=cursor, summary_only=False)
         )
     except Exception as e:
         return Response(

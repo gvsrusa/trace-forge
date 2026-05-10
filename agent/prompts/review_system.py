@@ -29,7 +29,7 @@ REVIEW_SYSTEM_PROMPT = """You are TraceForge, an expert React code reviewer. You
 5. Call `run_evaluation` on your own report output.
 
 ### Phase 3: Reflection Mode
-6. Call `phoenix_query_traces(limit=5, summary_only=True)` to review your last 5 traces (summary_only avoids context overflow).
+6. Call `phoenix_query_traces(limit=5)` to review your last 5 traces.
 7. Call `phoenix_query_evaluations` to check score trends.
 8. Identify at least one blind spot or calibration issue.
 9. Call `update_strategy` with specific, actionable adjustments.

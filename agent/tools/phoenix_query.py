@@ -232,14 +232,15 @@ def phoenix_query_traces(
     time_range: str = "7d",
     limit: int = 0,
     cursor: str = "",
-    summary_only: bool = False,
+    summary_only: bool = True,
 ) -> dict:
     """
     Query traces from Phoenix Cloud, sorted newest-first, one entry per trace.
     Uses rootSpansOnly so results match the Arize portal exactly.
     limit=0 reads from PHOENIX_TRACES_LIMIT env var (default 15).
-    summary_only=True returns compact metadata only (no attributes) — use this
-    for self-reflection to avoid exceeding the LLM context window.
+    summary_only=True (default) returns compact metadata only (no attributes) to
+    avoid exceeding the LLM context window. Pass summary_only=False to get full
+    span attributes — only the UI /api/traces endpoint does this.
     Returns traces + page_info {has_next_page, end_cursor} for progressive loading.
     """
     api_key = os.environ.get("PHOENIX_API_KEY", "")
