@@ -119,7 +119,7 @@ export default function ReviewPanel() {
       {/* Left: input */}
       <div className="flex flex-col gap-3 w-1/2">
         {/* Tabs */}
-        <div className="flex gap-1">
+        <div className="flex flex-wrap gap-1">
           {(["paste", "repo"] as Tab[]).map((t) => (
             <button
               key={t}
