@@ -194,11 +194,52 @@ def _fetch_traces(
     }
 
 
-def phoenix_query_traces(query: str = "", time_range: str = "7d", limit: int = 0, cursor: str = "") -> dict:
+def _summarize_trace(trace: dict) -> dict:
+    """Return a compact summary of a trace suitable for LLM self-reflection.
+
+    Omits all span attributes (which can be 100KB+ of LLM blobs) and keeps
+    only the metadata needed to spot blind spots: names, status, duration.
+    """
+    spans = trace.get("spans", [])
+    root = next((s for s in spans if s.get("parent_id") is None), spans[0] if spans else {})
+
+    def _duration_ms(s: dict) -> int:
+        try:
+            from datetime import datetime, timezone
+            fmt = "%Y-%m-%dT%H:%M:%S.%fZ"
+            start = datetime.strptime(s["start_time"], fmt).replace(tzinfo=timezone.utc)
+            end = datetime.strptime(s["end_time"], fmt).replace(tzinfo=timezone.utc)
+            return int((end - start).total_seconds() * 1000)
+        except Exception:
+            return 0
+
+    return {
+        "traceId": trace["traceId"],
+        "root_name": root.get("name", ""),
+        "root_status": root.get("status_code", "UNSET"),
+        "duration_ms": _duration_ms(root),
+        "num_spans": len(spans),
+        "span_names": [s.get("name", "") for s in spans],
+        "error_spans": [
+            {"name": s.get("name", ""), "message": s.get("status_message", "")}
+            for s in spans if s.get("status_code") == "ERROR"
+        ],
+    }
+
+
+def phoenix_query_traces(
+    query: str = "",
+    time_range: str = "7d",
+    limit: int = 0,
+    cursor: str = "",
+    summary_only: bool = False,
+) -> dict:
     """
     Query traces from Phoenix Cloud, sorted newest-first, one entry per trace.
     Uses rootSpansOnly so results match the Arize portal exactly.
-    limit=0 reads from PHOENIX_TRACES_LIMIT env var (default 10).
+    limit=0 reads from PHOENIX_TRACES_LIMIT env var (default 15).
+    summary_only=True returns compact metadata only (no attributes) — use this
+    for self-reflection to avoid exceeding the LLM context window.
     Returns traces + page_info {has_next_page, end_cursor} for progressive loading.
     """
     api_key = os.environ.get("PHOENIX_API_KEY", "")
@@ -209,8 +250,11 @@ def phoenix_query_traces(query: str = "", time_range: str = "7d", limit: int = 0
     project = os.environ.get("PHOENIX_PROJECT_NAME", "traceforge")
     try:
         result = _fetch_traces(project, limit=resolved_limit, cursor=cursor or None)
+        traces = result["traces"]
+        if summary_only:
+            traces = [_summarize_trace(t) for t in traces]
         return {
-            "content": [{"type": "text", "text": json.dumps(result["traces"])}],
+            "content": [{"type": "text", "text": json.dumps(traces)}],
             "page_info": result["page_info"],
         }
     except Exception as e:
